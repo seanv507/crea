@@ -65,9 +65,13 @@ def make_factor_table_weighted(dataframe,fac_name,weights):
     weights_df['clicks']=dataframe['clicks']
     # hope concat doesn't create new [deep copy] dataframe
     
-    gp=weights_df.groupby(fac_name)
+    gp=weights_df.groupby(fac_name)['count'].sum()
     
-    def calc_CTR(group):
+    
+    fac_df.sort('count',ascending=False,inplace=True)
+    return fac_df,CTR
+    
+def calc_CTR(group):
         d = group['clicks']
         w = group['count']
         # return two values count and CTR 
@@ -78,9 +82,6 @@ def make_factor_table_weighted(dataframe,fac_name,weights):
     fac_df['stderr']=np.sqrt(CTR*(1-CTR)/fac_df['count'])
     fac_df['nstderr']=abs(fac_df['mean']-CTR)/fac_df['stderr']
     fac_df['flstderr']=(fac_df['count']*CTR>10)*fac_df['nstderr']
-    fac_df.sort('count',ascending=False,inplace=True)
-    return fac_df,CTR
-    
 # te=pd.DataFrame({'a':[0,1,0],'clicks':[0,0,1],'b':[1,2,3]})
     # wts=np.array([1,3,5]).reshape(3,)
 # d1,c1=make_factor_table_weighted(te,'a',wts)  
