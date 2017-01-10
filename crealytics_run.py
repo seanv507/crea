@@ -113,7 +113,19 @@ comment = [f + ':' + str(sp.factors_table_[f].shape[0]) for f in sp.factors]
 comment = ','.join(comment) + '|' + ','.join(sp.non_factors)
 
 %time scipy.io.mmwrite('data_201602_201603.mm', X, comment=comment, field='integer', precision=None, symmetry=None)
-
+#==============================================================================
+# Wall time: 34min 53s
+# comment
+# Out[88]: 'ad_group:678,campaign_id:5,day_week:7,device:3,
+# category_1st_level:12,category_2nd_level:33,category_3rd_level:71,
+# category_4th_level:92,category_5th_level:54,
+# product_type_1st_level:9,product_type_2nd_level:52,product_type_3rd_level:315,
+# product_type_4th_level:301,product_type_5th_level:36,
+# brand:1137,item_id:175327,
+# category_1st_level*brand:1312,category_2nd_level*brand:
+#     1713,category_3rd_level*brand:3241|'
+# 
+#==============================================================================
 # manually reviewed groupings to check no duplicate subcategories... 
 # only one is '--'
 # set as missing?
