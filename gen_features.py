@@ -57,20 +57,6 @@ def make_factor_table(dataframe,fac_name,CTR):
     fac_df.sort('count',ascending=False,inplace=True)
     return fac_df
 
-  
-def make_factor_table_weighted(dataframe,fac_name,weights):
-    # http://stackoverflow.com/questions/10951341/pandas-dataframe-aggregate-function-using-multiple-columns   
-    weights_df=dataframe[fac_name] # need to deal with list of names
-    weights_df['count']=weights
-    weights_df['clicks']=dataframe['clicks']
-    # hope concat doesn't create new [deep copy] dataframe
-    
-    gp=weights_df.groupby(fac_name)['count'].sum()
-    
-    
-    fac_df.sort('count',ascending=False,inplace=True)
-    return fac_df,CTR
-    
 def calc_CTR(group):
         d = group['clicks']
         w = group['count']
@@ -86,6 +72,28 @@ def calc_CTR(group):
     # wts=np.array([1,3,5]).reshape(3,)
 # d1,c1=make_factor_table_weighted(te,'a',wts)  
 
+  
+def make_factor_table_weighted(dataframe,fac_name,counts_name, events_name):
+    # http://stackoverflow.com/questions/10951341/pandas-dataframe-aggregate-function-using-multiple-columns   
+    weights_df=dataframe[fac_name] # need to deal with list of names
+    weights_df['counts']=weights
+    weights_df['events']=dataframe['clicks']
+    # hope concat doesn't create new [deep copy] dataframe
+    
+    fac_df=weights_df.groupby(fac_name)['count'].sum()
+    fac_df.sort('counts',ascending=False,inplace=True)
+    return fac_df,CTR
+    
+
+def make_factor_table_weighted_test():
+	te = pd.DataFrame({'a':[0,1,0],
+				  'clicks':[0,0,1],
+				       'b':[1,2,3]})
+    wts=np.array([1,3,5]).reshape(3,)
+	d1, c1 = make_factor_table_weighted(te, 'a', wts)
+	
+# take id metrics (eg clicks) etc
+# so sum all whichever variable we are 'counting'
 
 class SparseCat:
     def __init__(self,factors,non_factors ):
@@ -100,7 +108,6 @@ class SparseCat:
     def fit(self,X,y):
         # take pandas array and convert to csr representation
         self.factors_table_=dict()        
-        self.click_rate_=np.mean(y)
         
         for f in self.factors:
             fs=f.split('*') # either 'ad' or 'ad*site*device' etc
