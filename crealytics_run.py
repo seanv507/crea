@@ -69,6 +69,9 @@ group by
      brand,
      item_id
 """
+
+# doing this for 10 months took 25 minutes in sqlite
+
 # %matplotlib
 
 lookup_sql = 'select * from lookup_20160201_20161201'
@@ -113,6 +116,7 @@ comment = [f + ':' + str(sp.factors_table_[f].shape[0]) for f in sp.factors]
 comment = ','.join(comment) + '|' + ','.join(sp.non_factors)
 
 %time scipy.io.mmwrite('data_201602_201603.mm', X, comment=comment, field='integer', precision=None, symmetry=None)
+
 #==============================================================================
 # Wall time: 34min 53s
 # comment
@@ -126,6 +130,12 @@ comment = ','.join(comment) + '|' + ','.join(sp.non_factors)
 #     1713,category_3rd_level*brand:3241|'
 # 
 #==============================================================================
+
+data_df[[ 'impressions','clicks', 'conversions', 'cross_device_conv',
+'total_conv_value', 'cost']].to_csv('metrics_201602_201603.csv', index=False)
+
+
+
 # manually reviewed groupings to check no duplicate subcategories... 
 # only one is '--'
 # set as missing?
