@@ -82,28 +82,50 @@ lookup_df.set_index(['id_name','id_index'], inplace=True)
 # data_df=pd.read_sql_query(data_sql,engine)
 # Wall time: 15min 26s
 data_df=pd.read_pickle('report_group_201602_201603.pkl')
+orig_names = [u'Ad group', u'Ad group ID', u'Brand', u'Campaign', u'Campaign ID', u'Category (1st level)', u'Category (2nd level)', u'Category (3rd level)', u'Category (4th level)', u'Category (5th level)',
+              u'Country/Territory', u'Custom label 0', u'Custom label 1', u'Custom label 2', u'Custom label 3', u'Custom label 4', u'Device', u'Item Id', 
+              u'Product type (1st level)',  u'Product type (2nd level)', u'Product type (3rd level)', u'Product type (4th level)', u'Product type (5th level)']
+std_names = [u'ad_group', u'ad_group_id', u'brand', u'campaign', u'campaign_id', u'category_1st_level',   u'category_2nd_level',   u'category_3rd_level',    u'category_4th_level', u'category_5th_level',
+              u'country', u'custom_label_0', u'custom_label_1', u'custom_label_2', u'custom_label_3', u'custom_label_4', u'device', u'item_id', 
+              'product_type_1st_level', u'product_type_2nd_level', 'product_type_3rd_level', u'product_type_4th_level', u'product_type_5th_level'] 
+data_df.rename(columns = dict(zip(std_names,orig_names)), inplace = True)
 
 #TODO replace '-- ' with something specific to higher category
 #TODO what to do about NAs
 #TODO mappings of names
 
-factors=['ad_group','campaign_id','day_week','device',
-         'category_1st_level', 'category_2nd_level',
-         'category_3rd_level', 'category_4th_level',
-         'category_5th_level',
-         'product_type_1st_level', 'product_type_2nd_level',
-         'product_type_3rd_level', 'product_type_4th_level',
-         'product_type_5th_level', 
-         'brand', 'item_id',
-         'category_1st_level*brand', 'category_2nd_level*brand', 'category_3rd_level*brand']
+#==============================================================================
+# factors=['ad_group','campaign_id','day_week','device',
+#          'category_1st_level', 'category_2nd_level',
+#          'category_3rd_level', 'category_4th_level',
+#          'category_5th_level',
+#          'product_type_1st_level', 'product_type_2nd_level',
+#          'product_type_3rd_level', 'product_type_4th_level',
+#          'product_type_5th_level', 
+#          'brand', 'item_id',
+#          'category_1st_level*brand', 'category_2nd_level*brand', 'category_3rd_level*brand']
+# 
+#==============================================================================
+
+factors = [u'Ad group', u'Campaign ID', 'day_week', u'Device',  u'Category (1st level)', u'Category (2nd level)', u'Category (3rd level)', u'Category (4th level)', u'Category (5th level)',
+              u'Product type (1st level)',  u'Product type (2nd level)', u'Product type (3rd level)', u'Product type (4th level)', u'Product type (5th level)', 
+              u'Brand', u'Item Id', 
+              'Category (1st level)*Brand', 'Category (2nd level)*Brand', 'Category (3rd level)*Brand']
+
+
+
+ # given lack of clicks/conversions better (at start) 
+        # to only look at clicks so dealing with smaller tables
+        
+        
 
 non_factors=[]
-counts_events=pd.DataFrame({'Name':['CVR','CTR'],'counts':['clicks','impressions'],'events':['conversions','clicks']})
+counts_events=pd.DataFrame({'Name':['CVR'],'counts':['clicks'],'events':['conversions']})
 metrics_name=['cost']
 
 sp = SparseCat(factors, non_factors, counts_events, metrics_names = metrics_name, alpha=0.75, lookup_df=lookup_df)
 
-%time sp.fit(data_df)
+%time sp.fit(data_df.head(1000))
 
 # Wall time: 1min 10s
 
