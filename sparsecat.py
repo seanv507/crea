@@ -62,12 +62,21 @@ def calc_metrics(df,gps,counts_events,metrics_names,alpha=0.75, lookup_df = None
     met=df.groupby(gps)[metrics].sum()
 #    met.reset_index(inplace=True)
 #    # map on index doesn't accept series
-#    if isinstance(gps, basestring):
-#        gps=[gps]
-#    for g in gps:
-#        if g in lookup_df.index.levels[0]:
-#        
-#            met[g + '_name'] = met[g].map(lookup_df.xs(g).id)
+    if isinstance(gps, basestring):
+        gps=[gps]
+    for i_g, g in enumerate(gps):
+        if g in lookup_df.index.levels[0]:
+        
+            #met[g + '_name'] = met.index.map(lookup_df.xs(g).id)
+            # taken from series.map source            
+            # indexer = met.index.get_indexer(lookup_df.xs(g).id)
+            if met.index.ndim==1:
+                met[g + '_name'] = met.index.to_series().map(lookup_df.xs(g).id)
+            else:
+                met[g + '_name'] = met.index.level[i_g].to_series().map(lookup_df.xs(g).id)
+            #TODO either keep as separate dfs in ordered dict or need to turn into 1 d index/name    
+            #TODO  clumsy
+            
     # but sparsecat expects mapping as index
     for e in counts_events.itertuples():
         met[e.Name + '%']=met[e.events].div(met[e.counts])*100
@@ -90,7 +99,7 @@ class SparseCat:
         # make copy
         self.factors=tuple(factors)
         self.non_factors=tuple(non_factors)
-        self.counts_events = counts_events.copy()
+        self.counts_events = counts_events.copy() #dataframe...
         self.metrics_names = metrics_names
         self.alpha = alpha
         self.lookup_df = lookup_df
@@ -101,78 +110,77 @@ class SparseCat:
     def fit(self,X,y = None):
         # don't use y
         # take pandas array and convert to csr representation
-        self.factors_table_=dict()        
         
+        factors_tables = []
+        self.len_factors = []
         for f in self.factors:
             fs=f.split('*') # either 'ad' or 'ad*site*device' etc
             # keep ordering or not? no checking of duplicates etc
             # why use y at all? X has to contain clicks anyway
-            self.factors_table_[f] = \
-                calc_metrics(X, fs, 
+            table = calc_metrics(X, fs, 
                              self.counts_events, self.metrics_names, 
                              self.alpha, self.lookup_df)
-                             
-        self.mappings_=dict()
+            table.sort_values(self.counts_events.loc[0,'counts'], 
+                              inplace = True, 
+                              ascending = False)
+            if len(fs)>1:
+                table.index = table.index.map(lambda x:'*'.join(map(str,x)))
+            # to concatenate we need to have the same index dimensions!! making lookup harder?
+            factors_tables.append(table)
+            self.len_factors.append(table.shape[0])
+                
+        self.factors_table = pd.concat(factors_tables, keys=self.factors)
+        self.factors_table['col_index']=np.arange(self.factors_table.shape[0])
+       
+        #TODO identify NA !!!
         
-        for f in self.factors:
-            df=self.factors_table_[f]
-            #sig_levels=df[df['count']>self.count_cutoff].index
-            sig_levels=df.index
-            # we add 1 to tell whether item exists or not in mappings
-            # identify feature levels with flnst>2
-            # idea is either we find in dict and set corresponding point to 1,
-            # or (initialised) data is left at zero
-            self.mappings_[f]=collections.defaultdict(int,zip(sig_levels,range(1,len(sig_levels)+1)))
-        
-        #identify NA !!!
-        self.len_factors= [ len(self.mappings_[factor]) for factor in self.factors]
 
         self.nfeatures_ =len(self.factors)+len(self.non_factors) #
-        
-        self.ncols_ = sum(self.len_factors)+len(self.non_factors) # # dummy variables + other
-        
-        
         self.start_non_factor_ = sum(self.len_factors)
+        
+        self.ncols_ = self.start_non_factor_ + len(self.non_factors) 
+        # dummy variables + other
+
         # should handle lim cases of zero factor/ non factor
         self.start_features_=np.concatenate(([0],
                                        np.cumsum(self.len_factors[:-1]),
                                 np.arange(self.start_non_factor_,
                                           self.start_non_factor_ \
                                           + len(self.non_factors))))
-                
+        self.columns = self.factors_table.index.levels[1].tolist() + list(self.non_factors)
+        
     
     def set_params(self,count_cutoff):
         self.count_cutoff=count_cutoff
-                  
+    
+              
     def transform(self,X):
         ndata=X.shape[0] # original data length
         # idea is that we set "irrel" to zero and all other
         
-        
         indices=np.zeros((ndata, self.nfeatures_),dtype=np.int)
         vals=np.ones((ndata,self.nfeatures_))
+        # then overwrite ones for Non mapped and non_factors
         for ifactor,factor in enumerate(self.factors):
             factor_split=factor.split('*')
+            
             # mult or single !!!
             if len(factor_split)==1:
-                index=X[factor].map(self.mappings_[factor])
+                keyer = X[factor]
             else:
-                
-                #was index=X[factor_split].apply(lambda x: self.mappings_[factor][x],axis=1)
-                #but see http://stackoverflow.com/q/22293683
-                index=X[factor_split].apply(tuple, axis=1).map( self.mappings_[factor])
-                
-
-            # index starts at 1 to identify missing fields as zero
-            index_zeros=np.where(index==0)[0]
-            indices[:,ifactor]= index - 1 + self.start_features_[ifactor]
-            # now fix the few zero entries
-            indices[index_zeros]=self.start_features_[ifactor]
-            vals[index_zeros,ifactor]=0
+                keyer = X[factor_split].apply(tuple, axis=1)
+            
+            index = keyer.map( self.factor_tables['col_index'].xs(factor))
+            #was index=X[factor_split].apply(lambda x: self.mappings_[factor][x],axis=1)
+            #but see http://stackoverflow.com/q/22293683
+            
+            # identify vals failed to map
+            vals[index.isna()] = 0
+            index = index.fillna(self.start_features_[ifactor])
 
         for i,non_factor in enumerate(self.non_factors):
-            indices[:,len(self.factors)+i] = self.start_non_factor_+i
-            vals[:,len(self.factors)+i]=X[non_factor]
+            indices[:, len(self.factors) + i] = self.start_non_factor_ + i
+            vals[   :, len(self.factors) + i] = X[non_factor]
         
         X_sparse=csr_matrix((vals.ravel(),indices.ravel(),self.nfeatures_ \
             * np.arange(ndata+1)))
