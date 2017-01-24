@@ -8,7 +8,7 @@ from __future__ import division
 import pandas as pd
 import numpy as np
 from scipy.sparse import csr_matrix
-import collections
+from collections import OrderedDict
 from scipy.stats import beta
 
 def map_lookup(df, lookup_df=None, subset=None):
@@ -58,24 +58,26 @@ def calc_metrics(df,gps,counts_events,metrics_names,alpha=0.75, lookup_df = None
     # http://stackoverflow.com/a/922796/
     metrics = counts_events.counts.tolist() 
     metrics += [c for c in counts_events.events.tolist() if c not in metrics] 
-    metrics += metrics_names
+    if metrics_names:
+        metrics += metrics_names
     met=df.groupby(gps)[metrics].sum()
 #    met.reset_index(inplace=True)
 #    # map on index doesn't accept series
     if isinstance(gps, basestring):
         gps=[gps]
-    for i_g, g in enumerate(gps):
-        if g in lookup_df.index.levels[0]:
-        
-            #met[g + '_name'] = met.index.map(lookup_df.xs(g).id)
-            # taken from series.map source            
-            # indexer = met.index.get_indexer(lookup_df.xs(g).id)
-            if met.index.ndim==1:
-                met[g + '_name'] = met.index.to_series().map(lookup_df.xs(g).id)
-            else:
-                met[g + '_name'] = met.index.level[i_g].to_series().map(lookup_df.xs(g).id)
-            #TODO either keep as separate dfs in ordered dict or need to turn into 1 d index/name    
-            #TODO  clumsy
+    if lookup_df is not None: 
+        for i_g, g in enumerate(gps):
+            if g in lookup_df.index.levels[0]:
+            
+                #met[g + '_name'] = met.index.map(lookup_df.xs(g).id)
+                # taken from series.map source            
+                # indexer = met.index.get_indexer(lookup_df.xs(g).id)
+                if met.index.ndim==1:
+                    met[g + '_name'] = met.index.to_series().map(lookup_df.xs(g).id)
+                else:
+                    met[g + '_name'] = met.index.level[i_g].to_series().map(lookup_df.xs(g).id)
+                #TODO either keep as separate dfs in ordered dict or need to turn into 1 d index/name    
+                #TODO  clumsy
             
     # but sparsecat expects mapping as index
     for e in counts_events.itertuples():
@@ -111,8 +113,11 @@ class SparseCat:
         # don't use y
         # take pandas array and convert to csr representation
         
-        factors_tables = []
+        self.factors_tables = OrderedDict()
+        # will fail if duplicate columns - which is useless
         self.len_factors = []
+        self.col_names = []
+        start = 0
         for f in self.factors:
             fs=f.split('*') # either 'ad' or 'ad*site*device' etc
             # keep ordering or not? no checking of duplicates etc
@@ -123,19 +128,26 @@ class SparseCat:
             table.sort_values(self.counts_events.loc[0,'counts'], 
                               inplace = True, 
                               ascending = False)
+            
             if len(fs)>1:
-                table.index = table.index.map(lambda x:'*'.join(map(str,x)))
-            # to concatenate we need to have the same index dimensions!! making lookup harder?
-            factors_tables.append(table)
-            self.len_factors.append(table.shape[0])
+            # 'col_name' is an identifier for eg labelling coefficients
+                table['col_name'] = table.index.map(lambda x: f + '=' + '*'.join(map(str,x)))
+            else:
+                table['col_name'] = f + '=' + table.index.astype(str)
                 
-        self.factors_table = pd.concat(factors_tables, keys=self.factors)
-        self.factors_table['col_index']=np.arange(self.factors_table.shape[0])
-       
-        #TODO identify NA !!!
-        
+            table['col_index'] = start + np.arange(table.shape[0])
+            self.factors_tables[f] =table
 
-        self.nfeatures_ =len(self.factors)+len(self.non_factors) #
+            table_len = table.shape[0]
+            start += table_len
+            self.len_factors.append(table_len)
+            self.col_names.append( table['col_name'].tolist())
+
+        self.col_names.append(list(self.non_factors))
+
+        #TODO identify NA !!!
+
+        self.nfeatures_ = len(self.factors) + len(self.non_factors) #
         self.start_non_factor_ = sum(self.len_factors)
         
         self.ncols_ = self.start_non_factor_ + len(self.non_factors) 
@@ -147,7 +159,7 @@ class SparseCat:
                                 np.arange(self.start_non_factor_,
                                           self.start_non_factor_ \
                                           + len(self.non_factors))))
-        self.columns = self.factors_table.index.levels[1].tolist() + list(self.non_factors)
+         
         
     
     def set_params(self,count_cutoff):
@@ -170,13 +182,16 @@ class SparseCat:
             else:
                 keyer = X[factor_split].apply(tuple, axis=1)
             
-            index = keyer.map( self.factor_tables['col_index'].xs(factor))
+            index = keyer.map( self.factors_tables[factor]['col_index'])
             #was index=X[factor_split].apply(lambda x: self.mappings_[factor][x],axis=1)
             #but see http://stackoverflow.com/q/22293683
             
             # identify vals failed to map
-            vals[index.isna()] = 0
+            not_mapped = index.isnull().values
+            
+            vals[ not_mapped, ifactor] = 0
             index = index.fillna(self.start_features_[ifactor])
+            indices[:, ifactor] = index
 
         for i,non_factor in enumerate(self.non_factors):
             indices[:, len(self.factors) + i] = self.start_non_factor_ + i
