@@ -4,6 +4,12 @@ require(sqldf)
 require(ggplot2)
 require(stringr)
 require(Hmisc)
+# to do
+
+# lay out whole pipeline 
+# split charts ? one per page?
+
+#do results by month too
 
 # Multiple plot function
 # http://www.cookbook-r.com/Graphs/Multiple_graphs_on_one_page_(ggplot2)/
